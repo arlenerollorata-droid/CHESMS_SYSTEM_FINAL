@@ -138,7 +138,7 @@ export const APPOINTMENT_STATUS = [
   { value: 'Pending', label: 'Pending', color: '#F59E0B', bg: '#FEF3C7' },
   { value: 'Confirmed', label: 'Confirmed', color: '#3B82F6', bg: '#DBEAFE' },
   { value: 'In Progress', label: 'In Progress', color: '#8B5CF6', bg: '#EDE9FE' },
-  { value: 'Completed', label: 'Completed', color: '#10B981', bg: '#D1FAE5' },
+  { value: 'Completed', label: 'Confirmed (legacy)', color: '#10B981', bg: '#D1FAE5' },
   { value: 'No-show', label: 'No-show', color: '#64748B', bg: '#F1F5F9' },
   { value: 'Cancelled', label: 'Cancelled', color: '#EF4444', bg: '#FEE2E2' }
 ]

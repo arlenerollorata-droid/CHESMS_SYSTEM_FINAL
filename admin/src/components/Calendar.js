@@ -51,13 +51,36 @@ const Calendar = ({ events = [], schedules = [], appointments = [] }) => {
   }, []);
 
   const getItemsForDay = (day) => {
-    const dateStr = new Date(year, month, day).toDateString();
+    // Robust date comparison using local components
+    const isSameDay = (d1, d2) => {
+      if (!d1 || !d2) return false;
+      
+      // Robust pinning: If it's a string (likely ISO from DB), 
+      // extract just the YYYY-MM-DD part.
+      const getDatePart = (val) => {
+        if (typeof val === 'string') return val.split('T')[0];
+        if (val instanceof Date) {
+          const y = val.getFullYear();
+          const m = String(val.getMonth() + 1).padStart(2, '0');
+          const d = String(val.getDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+        return null;
+      };
+
+      const date1Str = getDatePart(d1);
+      const date2Str = getDatePart(d2);
+
+      return date1Str !== null && date2Str !== null && date1Str === date2Str;
+    };
+
+    const targetDate = new Date(year, month, day);
     
-    const dayEvents = events.filter(e => new Date(e.date).toDateString() === dateStr);
+    const dayEvents = events.filter(e => isSameDay(e.date, targetDate));
     
     // Merge appointments into schedules as requested to simplify the UI
-    const dayAppointments = appointments.filter(a => new Date(a.date || a.appointmentDate || a.scheduleDate).toDateString() === dateStr);
-    const daySchedules = schedules.filter(s => new Date(s.date || s.scheduleDate).toDateString() === dateStr);
+    const dayAppointments = appointments.filter(a => isSameDay(a.date || a.appointmentDate || a.scheduleDate, targetDate));
+    const daySchedules = schedules.filter(s => isSameDay(s.date || s.scheduleDate, targetDate));
 
     const mappedEvents = dayEvents.map(e => ({
       ...e,

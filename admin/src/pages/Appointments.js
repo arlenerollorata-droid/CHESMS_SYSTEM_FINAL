@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -67,11 +67,13 @@ export default function Appointments() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isProtocolLoading, setIsProtocolLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormState);
+  const [submitting, setSubmitting] = useState(false);
   
   // UI States
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [tempProfile, setTempProfile] = useState(null);
+  const submittingRef = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -126,7 +128,10 @@ export default function Appointments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.patientId) return alert("Select a person first.");
+    if (submittingRef.current || submitting) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    if (!formData.patientId) { submittingRef.current = false; setSubmitting(false); return alert("Select a person first."); }
     
     try {
       const payloadBase = {
@@ -155,21 +160,23 @@ export default function Appointments() {
         await axios.post(API_URL, payloadBase);
       }
       
+      submittingRef.current = false;
+      setSubmitting(false);
       fetchData();
       setIsAddModalOpen(false);
       setFormData(initialFormState);
       setSearchQuery("");
       setTempProfile(null);
-    } catch (err) { alert("Error saving appointment."); }
+    } catch (err) { submittingRef.current = false; setSubmitting(false); alert("Error saving appointment."); }
   };
 
   const toggleStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === 'Completed' ? 'Pending' : 'Completed';
+    const newStatus = currentStatus === 'Confirmed' ? 'Pending' : 'Confirmed';
     try {
       await axios.patch(`${API_URL}/${id}/status`, { status: newStatus });
       fetchData();
       if (selectedPerson) handlePersonClick(selectedPerson);
-    } catch (err) { console.error(err); }
+    } catch (err) { fetchData(); console.error(err); }
   };
 
   const getTypeStyles = (type) => {
@@ -351,8 +358,8 @@ export default function Appointments() {
               {/* FOOTER */}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3rem', paddingTop: '2rem', borderTop: '1.5px solid #F1F5F9' }}>
                 <button type="button" className="button button--secondary" style={{ height: '60px', borderRadius: '16px' }} onClick={()=>setFormData(initialFormState)}><FontAwesomeIcon icon={faEraser} /> CLEAR FORM</button>
-                <button type="submit" disabled={isProtocolLoading} className="button button--primary" style={{ minWidth: '220px', height: '60px', borderRadius: '16px', background: '#0F172A' }}>
-                    {isProtocolLoading ? <FontAwesomeIcon icon={faSync} spin /> : "FINALIZE SCHEDULE"}
+                <button type="submit" disabled={submitting || isProtocolLoading} className="button button--primary" style={{ minWidth: '220px', height: '60px', borderRadius: '16px', background: (submitting || isProtocolLoading) ? '#64748B' : '#0F172A', cursor: (submitting || isProtocolLoading) ? 'not-allowed' : 'pointer', opacity: (submitting || isProtocolLoading) ? 0.7 : 1 }}>
+                    {submitting || isProtocolLoading ? <FontAwesomeIcon icon={faSync} spin /> : "FINALIZE SCHEDULE"}
                 </button>
               </div>
             </form>

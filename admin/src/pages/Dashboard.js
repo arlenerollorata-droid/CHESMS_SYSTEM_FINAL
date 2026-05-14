@@ -228,8 +228,8 @@ function Dashboard() {
 
       // 4. Program Share
       const totalCount = records.length || 1;
-      const preCount = schedules.filter(s => s.scheduleType === 'Prenatal' && s.status === 'Completed').length;
-      const vacCount = schedules.filter(s => (s.scheduleType === 'Immunization' || s.service?.toLowerCase().includes('vaccine')) && s.status === 'Completed').length;
+      const preCount = schedules.filter(s => s.scheduleType === 'Prenatal' && (s.status === 'Confirmed' || s.status === 'Completed')).length;
+      const vacCount = schedules.filter(s => (s.scheduleType === 'Immunization' || s.service?.toLowerCase().includes('vaccine')) && (s.status === 'Confirmed' || s.status === 'Completed')).length;
       setProgramBreakdown([
         { name: 'Prenatal', value: Math.round((preCount/totalCount)*100), color: '#EC4899' },
         { name: 'Vaccine', value: Math.round((vacCount/totalCount)*100), color: '#8B5CF6' },
@@ -240,12 +240,29 @@ function Dashboard() {
       const todayStart = new Date();
       todayStart.setHours(0,0,0,0);
       
-      setStats(prev => [
-        { ...prev[0], value: records.length.toString() },
-        { ...prev[1], value: events.filter(e => new Date(e.date) >= todayStart).length.toString() },
-        { ...prev[2], value: residents.length.toString() },
-        { ...prev[3], value: announcements.length.toString() },
-      ]);
+      const totalSchedules = schedules.length
+      const todaySchedules = schedules.filter(s => {
+        if (!s.date) return false
+        const d = new Date(s.date)
+        d.setHours(0,0,0,0)
+        return d.getTime() === todayStart.getTime()
+      }).length
+      
+      const totalAppts = totalSchedules + appointments.length
+      
+      setStats(prev => {
+        const prevVal = prev[1]?.value ? parseInt(String(prev[1].value).replace(/,/g, '')) || 0 : 0
+        const diff = totalAppts - prevVal
+        const trendPct = prevVal > 0 ? Math.round((diff / prevVal) * 100) : (diff > 0 ? 100 : 0)
+        const trendStr = trendPct >= 0 ? `+${trendPct}%` : `${trendPct}%`
+        
+        return [
+          { ...prev[0], value: records.length.toString() },
+          { ...prev[1], value: totalAppts.toString(), trend: trendStr },
+          { ...prev[2], value: residents.length.toString() },
+          { ...prev[3], value: announcements.length.toString() },
+        ]
+      });
 
       // 6. Trends
       const now = new Date();
@@ -460,7 +477,7 @@ function Dashboard() {
                 <p style={{ margin: 0, fontSize: isMobile ? '0.6rem' : '0.7rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.85, letterSpacing: '0.5px' }}>{s.label}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
                   <h2 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 900, letterSpacing: '-1px' }}>{loading ? "..." : s.value}</h2>
-                  <FontAwesomeIcon icon={faArrowUp} style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '4px' }} />
+                  <FontAwesomeIcon icon={s.trend?.startsWith('+') ? faArrowUp : faArrowDown} style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '4px' }} />
                 </div>
               </div>
               {/* Decorative background circle */}

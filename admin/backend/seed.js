@@ -322,7 +322,7 @@ const seedDatabase = async () => {
   const scheduleData = [];
   const scheduleTypes = ['Prenatal', 'Immunization', 'Special Case', 'Routine', 'NCD (Hypertension/Diabetes)'];
   const services = ['Prenatal Check-up', 'Vaccine', 'Follow-up', 'BP Monitoring', 'Dental'];
-  const statuses = ['Pending', 'Completed', 'Cancelled'];
+  const statuses = ['Pending', 'Confirmed', 'Cancelled'];
   
   for (let i = 0; i < 30; i++) {
     const date = new Date(now);

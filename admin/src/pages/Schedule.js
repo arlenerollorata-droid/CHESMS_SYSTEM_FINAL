@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useRef } from "react"
 import axios from "axios"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { faChevronLeft, faChevronRight, faPlus, faTimes, faCalendarAlt, faUser, faStethoscope, faSyringe, faBaby, faHeartbeat, faTooth, faUsers, faUserPlus, faLungs, faBone, faExclamationTriangle, faEdit, faTrash, faCheck, faClock } from "@fortawesome/free-solid-svg-icons"
@@ -7,6 +7,7 @@ import Layout from "../components/Layout"
 import { CASE_CATEGORIES, PROTOCOLS, TIME_SLOTS, URGENCY_LEVELS, APPOINTMENT_STATUS, LOCATIONS, SCHEDULE_TYPES, SERVICE_DURATION } from "../data/appointmentSchema"
 
 const API_URL = "http://localhost:5000/api/schedules"
+const APPOINTMENTS_API_URL = "http://localhost:5000/api/appointments"
 
 const CATEGORY_ICONS = {
   'Prenatal': faBaby,
@@ -27,6 +28,7 @@ export default function Schedule() {
   const [residents, setResidents] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState('week')
   const [selected, setSelected] = useState(null)
@@ -44,9 +46,31 @@ export default function Schedule() {
   const [showConflictModal, setShowConflictModal] = useState(false)
   const [conflictData, setConflictData] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deletingId, setDeletingId] = useState(null)
+  const [deletingAppointment, setDeletingAppointment] = useState(null)
   const [showDateSlotsModal, setShowDateSlotsModal] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
+  const [selectedDayForList, setSelectedDayForList] = useState(new Date())
+  const [filterStatus, setFilterStatus] = useState(null)
+
+  const toDateKey = (value) => {
+    if (!value) return ''
+    
+    // If it's a string from DB (e.g., "2026-05-14T00:00:00.000Z"),
+    // split it to get "2026-05-14" regardless of local timezone.
+    if (typeof value === 'string') {
+      return value.split('T')[0]
+    }
+    
+    // If it's a Date object (from calendar grid)
+    if (value instanceof Date) {
+      const y = value.getFullYear()
+      const m = String(value.getMonth() + 1).padStart(2, '0')
+      const d = String(value.getDate()).padStart(2, '0')
+      return `${y}-${m}-${d}`
+    }
+
+    return ''
+  }
 
   useEffect(() => { fetchAll() }, [])
 
@@ -73,12 +97,59 @@ export default function Schedule() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [s, p, r] = await Promise.all([
-        axios.get(API_URL),
+      const [s, a, p, r] = await Promise.all([
+        axios.get(API_URL), // schedules
+        axios.get(APPOINTMENTS_API_URL), // appointments
         axios.get("http://localhost:5000/api/patients"),
         axios.get("http://localhost:5000/api/residents"),
       ])
-      setAppointments(s.data)
+      
+      // Merge schedules and appointments into one list
+      // Standardize the data structure for consistent display in the calendar
+      const merged = [
+        ...s.data.map(item => ({ 
+          ...item, 
+          dataSource: 'schedule',
+          // Normalize 'Completed' → 'Confirmed' for consistent terminology
+          status: item.status === 'Completed' ? 'Confirmed' : item.status
+        })),
+        ...a.data.map(item => ({ 
+          ...item, 
+          dataSource: 'appointment',
+          // Use 'date' field consistently
+          date: item.date || item.appointmentDate || item.scheduleDate,
+          // Map appointment fields to schedule fields for the UI
+          category: item.category || item.type || 'General',
+          scheduleType: item.scheduleType || item.type || 'Appointment',
+          time: item.time || item.timeSlot || '9:00 AM',
+          // Normalize status: appliance schema → unified display values
+          // 'Scheduled' maps to 'Pending', 'No Show' maps to 'No-show',
+          // 'Completed' maps to 'Confirmed' (replaced terminology)
+          status: item.status === 'Scheduled' ? 'Pending' : 
+                  item.status === 'No Show' ? 'No-show' : 
+                  item.status === 'Completed' ? 'Confirmed' :
+                  item.status || 'Pending'
+        }))
+      ]
+      
+      // Deduplicate by _id first, then by composite key (patient+date+time)
+      // to catch cross-collection duplicates with different _ids
+      const seenId = new Set()
+      const seenComposite = new Set()
+      const deduped = merged.filter(item => {
+        if (seenId.has(item._id)) return false
+        seenId.add(item._id)
+        // Build composite key from patient + date + time for cross-collection dedup
+        const patientId = item.patient ? String(item.patient) : ''
+        const dateStr = item.date ? String(item.date).split('T')[0] : ''
+        const timeStr = item.time || ''
+        const compositeKey = `${patientId}|${dateStr}|${timeStr}`
+        if (compositeKey !== '||' && seenComposite.has(compositeKey)) return false
+        seenComposite.add(compositeKey)
+        return true
+      })
+      
+      setAppointments(deduped)
       setPatients(p.data)
       setResidents(r.data)
     } catch (e) { console.error(e) }
@@ -108,13 +179,16 @@ export default function Schedule() {
   }
 
   const getAppts = (d) => {
-    const s = new Date(d)
-    const y = s.getFullYear(), m = s.getMonth(), dt = s.getDate()
+    const selectedDateKey = toDateKey(d)
     return appointments.filter(a => {
-      if (!a.date) return false;
-      const ad = new Date(a.date)
-      return ad.getFullYear() === y && ad.getMonth() === m && ad.getDate() === dt && a.status !== 'Cancelled' && hasValidPatient(a)
-    }).sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+      if (!a.date) return false
+      if (filterStatus && a.status !== filterStatus) return false
+      return toDateKey(a.date) === selectedDateKey && a.status !== 'Cancelled'
+    }).sort((a, b) => {
+      const timeA = a.time || a.timeSlot || ''
+      const timeB = b.time || b.timeSlot || ''
+      return timeA.localeCompare(timeB)
+    })
   }
 
   const getCaseColor = (cat) => CASE_CATEGORIES[cat]?.color || '#94A3B8'
@@ -183,10 +257,10 @@ export default function Schedule() {
 
   // Conflict Detection Algorithm
   const checkConflict = (patientId, date, time, excludeId = null) => {
-    const appointmentDate = new Date(date).toDateString()
+    const appointmentDate = toDateKey(date)
     return appointments.find(a => 
       String(a.patient) === String(patientId) &&
-      new Date(a.date).toDateString() === appointmentDate &&
+      toDateKey(a.date) === appointmentDate &&
       (a.time === time || a.timeSlot === time) &&
       a._id !== excludeId &&
       a.status !== 'Cancelled'
@@ -216,13 +290,6 @@ export default function Schedule() {
       }));
     }
     
-    // Normalize date to local date string for comparison
-    const getLocalDateString = (d) => {
-      if (!d) return '';
-      const dateObj = new Date(d);
-      return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-    };
-    
     // Convert time slot to minutes from midnight
     const timeToMinutes = (timeStr) => {
       if (!timeStr) return 0;
@@ -242,14 +309,13 @@ export default function Schedule() {
       return String(t).trim().replace(/\s+/g, ' ').toUpperCase();
     };
     
-    const selectedDateStr = getLocalDateString(date);
+    const selectedDateStr = toDateKey(date)
     const currentMinutes = today.getHours() * 60 + today.getMinutes();
     const fivePMMinutes = 17 * 60;
     
     const dayAppointments = appointments.filter(a => {
-      if (!a.date || !a.time || a.status === 'Cancelled') return false;
-      const apptDateStr = getLocalDateString(a.date);
-      return apptDateStr === selectedDateStr;
+      if (!a.date || !a.time || a.status === 'Cancelled') return false
+      return toDateKey(a.date) === selectedDateStr
     })
     
     return TIME_SLOTS.map(slot => {
@@ -287,8 +353,8 @@ export default function Schedule() {
 
   // Open edit modal
   const openEditModal = (appointment) => {
-    if (appointment.status === 'Completed') {
-      toast.error('Cannot edit a completed appointment')
+    if (appointment.status === 'Confirmed') {
+      toast.error('Cannot edit a confirmed appointment')
       return
     }
     setIsEditing(true)
@@ -313,15 +379,25 @@ export default function Schedule() {
 
   // Handle delete
   const handleDelete = async () => {
+    if (!deletingAppointment) return
     try {
-      await axios.delete(`${API_URL}/${deletingId}`)
+      const deleteUrl = deletingAppointment.dataSource === 'appointment'
+        ? `${APPOINTMENTS_API_URL}/${deletingAppointment._id}`
+        : `${API_URL}/${deletingAppointment._id}`
+      await axios.delete(deleteUrl)
       toast.success('Appointment deleted successfully')
-      fetchAll()
+      await fetchAll()
       setShowDeleteConfirm(false)
-      setDeletingId(null)
+      setDeletingAppointment(null)
       setSelected(null)
     } catch (err) {
-      toast.error('Error deleting appointment')
+      await fetchAll()
+      const status = err.response?.status
+      if (status === 404) {
+        toast.error('Appointment not found in database — it may have already been deleted')
+      } else {
+        toast.error('Error deleting appointment')
+      }
     }
   }
 
@@ -340,8 +416,9 @@ export default function Schedule() {
   // Submit form (create or update)
   const submitForm = async (e) => {
     e.preventDefault()
-    if (submitting) return
-    if (!form.patientId || !form.category || !form.service) return toast.error('Please select patient, category, and service')
+    if (submitting || submittingRef.current) return
+    submittingRef.current = true
+    if (!form.patientId || !form.category || !form.service) { submittingRef.current = false; return toast.error('Please select patient, category, and service') }
     
     // FIXED: Proper date validation
     if (!isEditing) {
@@ -424,6 +501,7 @@ export default function Schedule() {
       fetchAll()
       closeModal()
     } catch {
+      fetchAll()
       toast.error('Error updating appointment')
     }
   }
@@ -466,9 +544,20 @@ export default function Schedule() {
     link.click()
   }
 
-  const updateStatus = async (id, status) => {
-    try { await axios.patch(`${API_URL}/${id}/status`, { status }); fetchAll(); setSelected(null); toast.success('Status updated') }
-    catch { toast.error('Error updating status') }
+  const updateStatus = async (id, status, dataSource) => {
+    try {
+      if (dataSource === 'appointment') {
+        await axios.put(`${APPOINTMENTS_API_URL}/${id}`, { status })
+      } else {
+        await axios.patch(`${API_URL}/${id}/status`, { status })
+      }
+      fetchAll()
+      setSelected(null)
+      toast.success('Status updated')
+    } catch {
+      fetchAll()
+      toast.error('Error updating status')
+    }
   }
 
   const createAppointment = async () => {
@@ -480,6 +569,7 @@ export default function Schedule() {
     
     if (form.date < todayStr) {
       setSubmitting(false)
+      submittingRef.current = false
       toast.error('Cannot book appointments for past dates')
       return
     }
@@ -490,6 +580,7 @@ export default function Schedule() {
       
       if (selectedMinutes >= fivePMMinutes) {
         setSubmitting(false)
+        submittingRef.current = false
         toast.error('Cannot book after 5:00 PM - clinic hours ended')
         return
       }
@@ -526,19 +617,24 @@ export default function Schedule() {
       fetchAll()
       closeModal()
     } catch (err) { 
+      fetchAll()
       toast.error(err.response?.data?.message || 'Error creating appointment') 
     } finally {
       setSubmitting(false)
+      submittingRef.current = false
     }
   }
 
-  const today = useMemo(() => getAppts(new Date()), [appointments])
-  const stats = useMemo(() => ({
-    total: appointments.length,
-    today: today.length,
-    pending: appointments.filter(a => a.status === 'Pending').length,
-    completed: appointments.filter(a => a.status === 'Completed').length
-  }), [appointments, today])
+  const focusedDayAppts = useMemo(() => getAppts(selectedDayForList), [appointments, selectedDayForList, filterStatus])
+  const stats = useMemo(() => {
+    const list = Array.isArray(appointments) ? appointments : []
+    return {
+      pending: list.filter(a => a.status === 'Pending').length,
+      confirmed: list.filter(a => a.status === 'Confirmed').length,
+      total: list.length,
+      today: getAppts(new Date()).length
+    }
+  }, [appointments])
 
   const getStatusConfig = (status) => APPOINTMENT_STATUS.find(s => s.value === status) || APPOINTMENT_STATUS[0]
 
@@ -588,13 +684,32 @@ export default function Schedule() {
         </div>
       </div>
 
-      {/* Stats with Category Breakdown */}
+      {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-        <div className="stat-card"><div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#F59E0B' }}>{stats.pending}</div><div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Pending</div></div>
-        <div className="stat-card"><div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10B981' }}>{stats.completed}</div><div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Completed</div></div>
-        <div className="stat-card"><div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#6366F1' }}>{stats.total}</div><div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Total</div></div>
-        <div className="stat-card"><div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#EC4899' }}>{stats.today}</div><div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Today</div></div>
+        <div className="stat-card" onClick={() => setFilterStatus(filterStatus === 'Pending' ? null : 'Pending')} style={{ cursor: 'pointer', outline: filterStatus === 'Pending' ? '2px solid #F59E0B' : 'none' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#F59E0B' }}>{stats.pending}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Pending</div>
+        </div>
+        <div className="stat-card" onClick={() => setFilterStatus(filterStatus === 'Confirmed' ? null : 'Confirmed')} style={{ cursor: 'pointer', outline: filterStatus === 'Confirmed' ? '2px solid #10B981' : 'none' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10B981' }}>{stats.confirmed}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Confirmed</div>
+        </div>
+        <div className="stat-card" onClick={() => setFilterStatus(null)} style={{ cursor: 'pointer', outline: filterStatus === null ? '2px solid #6366F1' : 'none' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#6366F1' }}>{stats.total}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Total</div>
+        </div>
+        <div className="stat-card" onClick={() => { setFilterStatus(null); setCurrentDate(new Date()) }} style={{ cursor: 'pointer' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#EC4899' }}>{stats.today}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Today</div>
+        </div>
       </div>
+
+      {filterStatus && (
+        <div style={{ marginBottom: '12px', padding: '10px 16px', background: '#F0FDF4', borderRadius: '10px', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#16A34A' }}>Showing: <b>{filterStatus}</b> appointments</span>
+          <button onClick={() => setFilterStatus(null)} style={{ background: 'none', border: 'none', color: '#16A34A', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}>Clear filter</button>
+        </div>
+      )}
 
       {/* Navigation Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px', background: 'white', padding: '16px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
@@ -624,7 +739,7 @@ export default function Schedule() {
             const vacantCount = slotStatus.filter(s => s.status === 'vacant').length
             const occupiedCount = slotStatus.filter(s => s.status === 'occupied').length
             return (
-              <div key={i} className={`cal-cell ${d.toDateString() === new Date().toDateString() ? 'today' : ''}`} style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              <div key={i} className={`cal-cell ${d.toDateString() === new Date().toDateString() ? 'today' : ''}`} style={{ maxHeight: '400px', overflowY: 'auto' }} onClick={() => setSelectedDayForList(d)}>
                 {/* Summary Bar - Click to see all appointments */}
                 <div 
                   onClick={() => { setSelectedCalendarDate(d); setShowDateSlotsModal(true); }}
@@ -671,11 +786,11 @@ export default function Schedule() {
             const vacantCount = slotStatus.filter(s => s.status === 'vacant').length
             const occupiedCount = slotStatus.filter(s => s.status === 'occupied').length
             return (
-              <div key={i} className={`day-cell ${!item.cur ? 'dim' : ''} ${item.date.toDateString() === new Date().toDateString() ? 'today' : ''}`} style={{ minHeight: '100px' }} onClick={() => { setSelectedCalendarDate(item.date); setShowDateSlotsModal(true); }}>
+              <div key={i} className={`day-cell ${!item.cur ? 'dim' : ''} ${item.date.toDateString() === new Date().toDateString() ? 'today' : ''}`} style={{ minHeight: '100px' }} onClick={() => { setSelectedDay({ date: item.date, appointments: as }); setSelectedDayForList(item.date); }}>
                 <div className="dn" style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{item.date.getDate()}</span>
                   {as.length > 0 && (
-                    <span style={{ background: '#1E293B', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.55rem' }}>{as.length}</span>
+                    <span onClick={(e) => { e.stopPropagation(); setSelectedDay({ date: item.date, appointments: as }); }} style={{ background: '#1E293B', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.55rem', cursor: 'pointer' }}>{as.length}</span>
                   )}
                 </div>
                 {/* Show first 2 appointments with details */}
@@ -699,7 +814,7 @@ export default function Schedule() {
                   ))}
                 </div>
                 {as.length > 2 && (
-                  <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B', textAlign: 'center', padding: '4px', background: '#F1F5F9', borderRadius: '4px', cursor: 'pointer' }}>
+                  <div onClick={(e) => { e.stopPropagation(); setSelectedDay({ date: item.date, appointments: as }); }} style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B', textAlign: 'center', padding: '4px', background: '#F1F5F9', borderRadius: '4px', cursor: 'pointer' }}>
                     +{as.length - 2} more
                   </div>
                 )}
@@ -716,18 +831,26 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* Today's List */}
+      {/* Dynamic List for Focused Day */}
       <div style={{ marginTop: '24px', background: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0' }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}><FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#1E293B' }} /> Today's Schedule ({today.length})</h3>
-        {today.length === 0 ? <div style={{ color: '#94A3B8', textAlign: 'center', padding: '2rem' }}>No appointments scheduled for today</div> : (
+        <h3 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#1E293B' }} /> 
+          {selectedDayForList.toDateString() === new Date().toDateString() ? "Today's" : selectedDayForList.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} Schedule ({focusedDayAppts.length})
+        </h3>
+        {focusedDayAppts.length === 0 ? <div style={{ color: '#94A3B8', textAlign: 'center', padding: '2rem' }}>No appointments scheduled for this day</div> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {today.map(a => {
+            {focusedDayAppts.map(a => {
               const sc = getStatusConfig(a.status)
               return (
                 <div key={a._id} onClick={() => setSelected(a)} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', background: '#F8FAFC', borderRadius: '12px', cursor: 'pointer', border: '1px solid #E2E8F0', transition: 'all 0.2s' }}>
                   <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: getCaseColor(a.category), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: '1rem' }}>{getPatientDisplayName(a)?.charAt(0)}</div>
-                  <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{getPatientDisplayName(a)}</div><div style={{ fontSize: '0.75rem', color: '#64748B' }}>{a.time} • {a.service} • {a.scheduleType}</div></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: sc.bg, color: sc.color }}>{a.status}</span></div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{getPatientDisplayName(a)}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{a.time} • {a.service} • {a.scheduleType}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: sc.bg, color: sc.color }}>{a.status}</span>
+                  </div>
                 </div>
               )
             })}
@@ -790,10 +913,10 @@ export default function Schedule() {
               </div>
               {selected.notes && <div style={{ marginBottom: '16px', padding: '12px', background: '#FEFCE8', borderRadius: '10px', fontSize: '0.8rem', color: '#854D0E' }}><b>Notes:</b> {selected.notes}</div>}
               
-              {/* Completed Badge */}
-              {selected.status === 'Completed' && (
+              {/* Confirmed Badge */}
+              {selected.status === 'Confirmed' && (
                 <div style={{ marginBottom: '16px', padding: '12px', background: '#D1FAE5', borderRadius: '10px', fontSize: '0.85rem', color: '#059669', fontWeight: 700, textAlign: 'center' }}>
-                  ✓ This appointment has been completed
+                  ✓ This appointment has been confirmed
                 </div>
               )}
                
@@ -801,44 +924,44 @@ export default function Schedule() {
               <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
                 <button 
                   onClick={() => openEditModal(selected)}
-                  disabled={selected.status === 'Completed'}
+                  disabled={selected.status === 'Confirmed'}
                   style={{ 
                     flex: 1, 
                     padding: '12px', 
-                    background: selected.status === 'Completed' ? '#E2E8F0' : '#FEF3C7', 
-                    color: selected.status === 'Completed' ? '#94A3B8' : '#D97706', 
-                    border: `1px solid ${selected.status === 'Completed' ? '#CBD5E1' : '#FCD34D'}`,
+                    background: selected.status === 'Confirmed' ? '#E2E8F0' : '#FEF3C7', 
+                    color: selected.status === 'Confirmed' ? '#94A3B8' : '#D97706', 
+                    border: `1px solid ${selected.status === 'Confirmed' ? '#CBD5E1' : '#FCD34D'}`,
                     borderRadius: '10px', 
                     fontWeight: 700, 
                     fontSize: '0.85rem', 
-                    cursor: selected.status === 'Completed' ? 'not-allowed' : 'pointer', 
+                    cursor: selected.status === 'Confirmed' ? 'not-allowed' : 'pointer', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
                     gap: '6px',
-                    opacity: selected.status === 'Completed' ? 0.6 : 1
+                    opacity: selected.status === 'Confirmed' ? 0.6 : 1
                   }}
                 >
                   <FontAwesomeIcon icon={faEdit} /> Edit
                 </button>
                 <button 
-                  onClick={() => { setDeletingId(selected._id); setShowDeleteConfirm(true); }}
-                  disabled={selected.status === 'Completed'}
+                  onClick={() => { setDeletingAppointment(selected); setShowDeleteConfirm(true); }}
+                  disabled={selected.status === 'Confirmed'}
                   style={{ 
                     flex: 1, 
                     padding: '12px', 
-                    background: selected.status === 'Completed' ? '#E2E8F0' : '#FEE2E2', 
-                    color: selected.status === 'Completed' ? '#94A3B8' : '#DC2626', 
-                    border: `1px solid ${selected.status === 'Completed' ? '#CBD5E1' : '#FCA5A5'}`,
+                    background: selected.status === 'Confirmed' ? '#E2E8F0' : '#FEE2E2', 
+                    color: selected.status === 'Confirmed' ? '#94A3B8' : '#DC2626', 
+                    border: `1px solid ${selected.status === 'Confirmed' ? '#CBD5E1' : '#FCA5A5'}`,
                     borderRadius: '10px', 
                     fontWeight: 700, 
                     fontSize: '0.85rem', 
-                    cursor: selected.status === 'Completed' ? 'not-allowed' : 'pointer', 
+                    cursor: selected.status === 'Confirmed' ? 'not-allowed' : 'pointer', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
                     gap: '6px',
-                    opacity: selected.status === 'Completed' ? 0.6 : 1
+                    opacity: selected.status === 'Confirmed' ? 0.6 : 1
                   }}
                 >
                   <FontAwesomeIcon icon={faTrash} /> Delete
@@ -849,11 +972,11 @@ export default function Schedule() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                 {APPOINTMENT_STATUS.slice(0, 3).map(s => {
                   const isActive = selected.status === s.value
-                  const isDisabled = selected.status === 'Completed'
+                  const isDisabled = selected.status === 'Confirmed'
                   return (
                     <button 
                       key={s.value} 
-                      onClick={() => !isDisabled && updateStatus(selected._id, s.value)} 
+                      onClick={() => !isDisabled && updateStatus(selected._id, s.value, selected.dataSource)} 
                       className="status-btn" 
                       disabled={isDisabled}
                       style={{ 
@@ -890,7 +1013,7 @@ export default function Schedule() {
                 return (
                   <div key={a._id} onClick={() => { setSelectedDay(null); setSelected(a) }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', background: '#F8FAFC', borderRadius: '12px', cursor: 'pointer', border: '1px solid #E2E8F0', marginBottom: '10px', transition: 'all 0.2s' }}>
                     <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: getCaseColor(a.category), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: '1rem' }}>{getPatientDisplayName(a)?.charAt(0)}</div>
-                    <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{getPatientDisplayName(a)}</div><div style={{ fontSize: '0.75rem', color: '#64748B' }}>{a.time} - {a.service}</div></div>
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{getPatientDisplayName(a)}</div><div style={{ fontSize: '0.75rem', color: '#64748B' }}>{a.time} - {a.service}</div><div style={{ fontSize: '0.65rem', color: '#94A3B8', marginTop: '2px' }}>{a.category} • {a.location || 'Health Center'}</div></div>
                     <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: sc.bg, color: sc.color }}>{a.status}</span>
                   </div>
                 )
@@ -1006,13 +1129,9 @@ export default function Schedule() {
                 {/* Existing Appointments for Selected Date */}
                 {form.date && (() => {
                   const dayAppointments = appointments.filter(a => {
-                    if (!a.date || a.status === 'Cancelled') return false;
-                    const apptDate = new Date(a.date);
-                    const selectedDate = new Date(form.date + 'T00:00:00');
-                    return apptDate.getFullYear() === selectedDate.getFullYear() &&
-                           apptDate.getMonth() === selectedDate.getMonth() &&
-                           apptDate.getDate() === selectedDate.getDate();
-                  }).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                    if (!a.date || a.status === 'Cancelled') return false
+                    return toDateKey(a.date) === toDateKey(form.date)
+                  }).sort((a, b) => (a.time || '').localeCompare(b.time || ''))
                   
                   return (
                     <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '14px', border: '1px solid #E2E8F0', marginBottom: '12px' }}>
@@ -1281,10 +1400,11 @@ export default function Schedule() {
                 Cancel
               </button>
               <button 
-                onClick={() => createAppointment(true)}
-                style={{ flex: 1, padding: '14px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: 'pointer' }}
+                onClick={() => !submitting && createAppointment()}
+                disabled={submitting}
+                style={{ flex: 1, padding: '14px', background: submitting ? '#94A3B8' : '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1 }}
               >
-                Save Anyway
+                {submitting ? 'Creating...' : 'Save Anyway'}
               </button>
             </div>
           </div>
@@ -1304,7 +1424,7 @@ export default function Schedule() {
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
-                onClick={() => { setShowDeleteConfirm(false); setDeletingId(null); }}
+                onClick={() => { setShowDeleteConfirm(false); setDeletingAppointment(null); }}
                 style={{ flex: 1, padding: '14px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: 'pointer' }}
               >
                 Cancel

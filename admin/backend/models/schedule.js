@@ -49,4 +49,10 @@ const ScheduleSchema = new mongoose.Schema({
   focus: String
 }, { timestamps: true });
 
+// Unique compound index to prevent duplicate appointments
+ScheduleSchema.index({ patient: 1, date: 1, time: 1 }, { 
+  unique: true,
+  partialFilterExpression: { status: { $ne: 'Cancelled' } }
+});
+
 module.exports = mongoose.model("Schedule", ScheduleSchema);

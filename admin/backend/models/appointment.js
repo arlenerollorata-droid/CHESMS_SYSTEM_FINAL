@@ -6,7 +6,7 @@ const AppointmentSchema = new mongoose.Schema({
     date: { type: Date, required: true },
     time: String,
     type: { type: String, enum: ['Checkup', 'Follow-up', 'Emergency', 'Consultation'], default: 'Checkup' },
-    status: { type: String, enum: ['Scheduled', 'Completed', 'Cancelled', 'No Show'], default: 'Scheduled' },
+    status: { type: String, enum: ['Scheduled', 'Confirmed', 'Completed', 'Cancelled', 'No Show'], default: 'Scheduled' },
     notes: String,
     createdBy: String
 }, { timestamps: true });

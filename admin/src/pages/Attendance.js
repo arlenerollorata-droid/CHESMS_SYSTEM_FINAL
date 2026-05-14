@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -6,7 +6,7 @@ import {
   faSearch, faPlus, faUser,
   faQrcode, faTimes, faUserCheck, faIdCard,
   faHistory, faSync, faVideo,
-  faCalendarCheck, faClock, faEdit, faTrash
+  faCalendarCheck, faClock, faEdit, faTrash, faDownload, faSpinner
 } from "@fortawesome/free-solid-svg-icons";
 import { Html5Qrcode } from "html5-qrcode";
 import toast, { Toaster } from 'react-hot-toast';
@@ -22,6 +22,7 @@ export default function Attendance() {
   const [scannedPatient, setScannedPatient] = useState(null);
   const [scannerInstance, setScannerInstance] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
+  const [exporting, setExporting] = useState(false);
   
   const [formData, setFormData] = useState({
     patient: "",
@@ -33,7 +34,13 @@ export default function Attendance() {
   const fetchAttendance = useCallback(async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/attendance");
-      setAttendance(res.data);
+      const seen = new Set()
+      const deduped = res.data.filter(a => {
+        if (seen.has(a._id)) return false
+        seen.add(a._id)
+        return true
+      })
+      setAttendance(deduped);
     } catch (err) { console.error(err); }
   }, []);
 
@@ -154,15 +161,52 @@ export default function Attendance() {
     setIsEditModalOpen(true);
   };
 
-  const filtered = attendance.filter(a => 
-    a.patient?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.event?.title?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = useMemo(() =>
+    attendance.filter(a => 
+      a.patient?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.event?.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [attendance, searchTerm]
   );
 
-  const stats = [
+  const stats = useMemo(() => [
     { label: "Scanned Today", value: attendance.filter(a => new Date(a.date).toDateString() === new Date().toDateString()).length, icon: faCalendarCheck, color: "#10B981" },
     { label: "Total Visits", value: attendance.length, icon: faHistory, color: "#4169E1" }
-  ];
+  ], [attendance]);
+
+  const handleExport = async () => {
+    if (filtered.length === 0) return
+    setExporting(true)
+    try {
+      const rows = filtered.map(a => [
+        a.patient?.name || '',
+        a.event?.title || '',
+        new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        a.status || '',
+        new Date(a.date).toLocaleDateString()
+      ])
+      const headers = ['Resident Name', 'Health Event', 'Check-In Time', 'Status', 'Date Created']
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\r\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const today = new Date().toISOString().split('T')[0]
+      link.download = `attendance-report-${today}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${filtered.length} records`)
+    } catch {
+      toast.error('Error exporting attendance')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const headerActions = (
     <div className="responsive-actions">
@@ -171,6 +215,20 @@ export default function Attendance() {
         </button>
         <button className="button button--primary" onClick={() => { setScannedPatient(null); setIsModalOpen(true); }}>
             <FontAwesomeIcon icon={faPlus} /> Type Name
+        </button>
+        <button
+          className="button button--secondary"
+          onClick={handleExport}
+          disabled={exporting || filtered.length === 0}
+          style={{
+            background: filtered.length === 0 ? '#E2E8F0' : '#059669',
+            color: filtered.length === 0 ? '#94A3B8' : 'white',
+            border: 'none',
+            cursor: filtered.length === 0 || exporting ? 'not-allowed' : 'pointer',
+            opacity: filtered.length === 0 ? 0.6 : 1
+          }}
+        >
+          <FontAwesomeIcon icon={exporting ? faSpinner : faDownload} spin={exporting} /> {exporting ? 'Exporting...' : 'Export'}
         </button>
     </div>
   );

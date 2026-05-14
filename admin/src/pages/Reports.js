@@ -231,7 +231,7 @@ function Reports() {
     });
 
     const activeSchedules = filteredSchedules.filter(s => s.status === 'In Progress' || s.status === 'Confirmed').length;
-    const completedSchedules = filteredSchedules.filter(s => s.status === 'Completed').length;
+    const completedSchedules = filteredSchedules.filter(s => s.status === 'Confirmed' || s.status === 'Completed').length;
     const pendingSchedules = filteredSchedules.filter(s => s.status === 'Pending').length;
     const cancelledSchedules = filteredSchedules.filter(s => s.status === 'Cancelled').length;
 
@@ -325,7 +325,7 @@ function Reports() {
       rows.push([escapeCSVValue("Total Resident Base"), stats.totalResidents]);
       rows.push([escapeCSVValue("Total Consultations/Visits"), stats.totalVisits]);
       rows.push([escapeCSVValue("Active Schedules"), stats.activeSchedules]);
-      rows.push([escapeCSVValue("Completed Schedules"), stats.completedSchedules]);
+      rows.push([escapeCSVValue("Confirmed Schedules"), stats.completedSchedules]);
       rows.push([escapeCSVValue("Pending Schedules"), stats.pendingSchedules]);
       rows.push([escapeCSVValue("Cancelled Schedules"), stats.cancelledSchedules]);
       rows.push([escapeCSVValue("Today's Appointments"), stats.appointmentsToday]);
@@ -355,7 +355,7 @@ function Reports() {
       rows.push([]);
       rows.push([escapeCSVValue("== ADDITIONAL METRICS ==")]);
       rows.push([escapeCSVValue("Pending Schedules"), stats.pendingSchedules]);
-      rows.push([escapeCSVValue("Completed Schedules"), stats.completedSchedules]);
+      rows.push([escapeCSVValue("Confirmed Schedules"), stats.completedSchedules]);
       rows.push([escapeCSVValue("Cancelled Schedules"), stats.cancelledSchedules]);
     } else if (activeTab === 'morbidity') {
       rows.push([escapeCSVValue("== MORBIDITY PROFILE ==")]);
@@ -381,7 +381,7 @@ function Reports() {
       rows.push([escapeCSVValue("Total Today"), stats.appointmentsToday]);
       rows.push([escapeCSVValue("Pending"), stats.pendingSchedules]);
       rows.push([escapeCSVValue("In Progress"), stats.activeSchedules]);
-      rows.push([escapeCSVValue("Completed"), stats.completedSchedules]);
+      rows.push([escapeCSVValue("Confirmed"), stats.completedSchedules]);
     } else if (activeTab === 'demographics') {
       rows.push([escapeCSVValue("== AGE DISTRIBUTION ==")]);
       rows.push([escapeCSVValue("Age Group"), escapeCSVValue("Count"), escapeCSVValue("Percentage")]);
@@ -503,7 +503,7 @@ function Reports() {
               <StatCard title="Residents" value={stats.totalResidents} subtitle="Barangay" icon={faUserNurse} color="#10B981" />
               <StatCard title="Consultations" value={stats.totalVisits} subtitle="This period" icon={faStethoscope} color="#F59E0B" trend={stats.visitTrend} />
               <StatCard title="Active" value={stats.activeSchedules} subtitle="Schedules" icon={faCalendarCheck} color="#8B5CF6" />
-              <StatCard title="Completed" value={stats.completedSchedules} subtitle="This period" icon={faCheckCircle} color="#06B6D4" />
+              <StatCard title="Confirmed" value={stats.completedSchedules} subtitle="This period" icon={faCheckCircle} color="#06B6D4" />
             </section>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
@@ -557,7 +557,7 @@ function Reports() {
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <StatCard title="Pending" value={stats.pendingSchedules} subtitle="Awaiting" icon={faClock} color="#F59E0B" />
               <StatCard title="Active" value={stats.activeSchedules} subtitle="In Progress" icon={faCalendarCheck} color="#8B5CF6" />
-              <StatCard title="Completed" value={stats.completedSchedules} subtitle="Done" icon={faCheckCircle} color="#10B981" />
+              <StatCard title="Confirmed" value={stats.completedSchedules} subtitle="Done" icon={faCheckCircle} color="#10B981" />
               <StatCard title="Cancelled" value={stats.cancelledSchedules} subtitle="Voided" icon={faExclamationCircle} color="#EF4444" />
             </section>
 

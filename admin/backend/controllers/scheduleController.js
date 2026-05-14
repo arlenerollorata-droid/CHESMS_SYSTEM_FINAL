@@ -11,7 +11,7 @@ exports.getSchedules = async (req, res) => {
 
 exports.createSchedule = async (req, res) => {
   try {
-    const { date, time } = req.body;
+    const { date, time, patient } = req.body;
     
     // Validate date is not in the past
     const selectedDate = new Date(date + 'T00:00:00');
@@ -42,6 +42,19 @@ exports.createSchedule = async (req, res) => {
       
       if (selectedMinutes >= fivePMMinutes) {
         return res.status(400).json({ message: 'Cannot book appointments after 5:00 PM - clinic hours have ended' });
+      }
+    }
+    
+    // Check for duplicate: same patient + date + time with non-cancelled status
+    if (patient && date && time) {
+      const existing = await Schedule.findOne({
+        patient,
+        date: new Date(date + 'T00:00:00'),
+        time,
+        status: { $ne: 'Cancelled' }
+      });
+      if (existing) {
+        return res.status(409).json({ message: 'An appointment already exists for this patient at this date and time' });
       }
     }
     
@@ -60,6 +73,9 @@ exports.updateStatus = async (req, res) => {
       { status: req.body.status },
       { new: true }
     );
+    if (!updated) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -77,7 +93,7 @@ exports.getSchedulesByPatient = async (req, res) => {
 
 exports.updateSchedule = async (req, res) => {
   try {
-    const { date, time } = req.body;
+    const { date, time, patient } = req.body;
     
     // Validate date is not in the past
     const selectedDate = new Date(date + 'T00:00:00');
@@ -111,6 +127,20 @@ exports.updateSchedule = async (req, res) => {
       }
     }
     
+    // Check for duplicate: same patient + date + time on a DIFFERENT document
+    if (patient && date && time) {
+      const existing = await Schedule.findOne({
+        patient,
+        date: new Date(date + 'T00:00:00'),
+        time,
+        _id: { $ne: req.params.id },
+        status: { $ne: 'Cancelled' }
+      });
+      if (existing) {
+        return res.status(409).json({ message: 'Another appointment already exists for this patient at this date and time' });
+      }
+    }
+    
     const updated = await Schedule.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -124,7 +154,10 @@ exports.updateSchedule = async (req, res) => {
 
 exports.deleteSchedule = async (req, res) => {
   try {
-    await Schedule.findByIdAndDelete(req.params.id);
+    const deleted = await Schedule.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
     res.json({ message: "Schedule deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
