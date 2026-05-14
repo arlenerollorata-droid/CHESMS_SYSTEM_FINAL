@@ -17,6 +17,8 @@ export default function Announcements() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
   const [postType, setPostType] = useState("announcement");
@@ -24,8 +26,9 @@ export default function Announcements() {
   const [filterTab, setFilterTab] = useState("All"); 
   
   const [formData, setFormData] = useState({
-        title: "", content: "", category: "General", priority: "Medium",
-    date: "", startTime: "", endTime: "", location: "", target: "All Residents", isPinned: false
+    title: "", content: "", note: "", category: "General", priority: "Medium",
+    date: "", startTime: "", endTime: "", location: "", target: "All Residents", 
+    isPinned: false, capacityTotal: 0, capacityTaken: 0
   });
 
   useEffect(() => {
@@ -69,7 +72,9 @@ export default function Announcements() {
           endTime: item.endTime || "",
           location: item.location || "",
           target: item.target || "All Residents",
-          isPinned: item.isPinned || false
+          isPinned: item.isPinned || false,
+          capacityTotal: item.capacityTotal || 0,
+          capacityTaken: item.capacityTaken || 0
       });
       setIsModalOpen(true);
   };
@@ -81,9 +86,11 @@ export default function Announcements() {
           title: formData.title,
           content: formData.content,
           note: formData.note,
-          category: formData.category,
+          category: formData.target, // Map target to category for mobile app compatibility
+          target: formData.target,
           priority: formData.priority,
-          author: formData.author || undefined
+          isPinned: formData.isPinned,
+          author: formData.author || "Admin"
       } : {
           title: formData.title,
           description: formData.content,
@@ -92,10 +99,14 @@ export default function Announcements() {
           startTime: formData.startTime,
           endTime: formData.endTime || undefined,
           location: formData.location,
-          category: formData.category,
-          capacityTotal: formData.capacityTotal || undefined,
-          capacityTaken: formData.capacityTaken || undefined,
-          status: formData.status || undefined
+          category: formData.target === "Event" ? "Event" : formData.target,
+          target: formData.target,
+          priority: formData.priority,
+          isPinned: formData.isPinned,
+          capacityTotal: formData.capacityTotal || 0,
+          capacityTaken: formData.capacityTaken || 0,
+          status: formData.status || "Upcoming",
+          author: formData.author || "Admin"
       };
 
       const api = postType === "announcement" ? ANN_API : EVT_API;
@@ -113,7 +124,11 @@ export default function Announcements() {
       fetchData();
       setIsModalOpen(false);
       resetForm();
-    } catch (err) { console.error("Error saving post:", err); }
+      alert("Published successfully!");
+    } catch (err) { 
+        console.error("Error saving post:", err);
+        alert("Failed to publish: " + (err.response?.data?.message || err.message));
+    }
   };
 
   const resetForm = () => {
@@ -150,6 +165,8 @@ export default function Announcements() {
       if (target?.includes("Infants")) return faBaby;
       if (target?.includes("Pregnant")) return faPersonPregnant;
       if (target?.includes("Seniors")) return faUserShield;
+      if (target?.includes("Alert")) return faBolt;
+      if (target?.includes("News")) return faBroadcastTower;
       return faUsers;
   };
 
@@ -246,10 +263,18 @@ export default function Announcements() {
             const isNew = isNewPost(item.createdAt);
             
             return (
-                <div key={item._id} className={`report-card ${item.priority === 'High' ? 'status-pulse' : ''}`} style={{ 
+                <div key={item._id} className={`report-card ${item.priority === 'High' ? 'status-pulse' : ''}`} 
+                onClick={() => {
+                    if (item.type === 'event') {
+                        setSelectedEvent(item);
+                        setIsDetailModalOpen(true);
+                    }
+                }}
+                style={{ 
                 display: 'flex', padding: 0, overflow: 'hidden', borderRadius: '16px', border: '1px solid #E2E8F0', background: 'white',
                 boxShadow: item.isPinned ? '0 8px 20px -4px rgba(65, 105, 225, 0.15)' : 'var(--shadow-sm)',
-                transition: 'all 0.2s ease'
+                transition: 'all 0.2s ease',
+                cursor: item.type === 'event' ? 'pointer' : 'default'
                 }}>
                 <div style={{ width: '5px', background: `linear-gradient(to bottom, ${cardColor}, ${cardColor}88)` }}></div>
 
@@ -264,8 +289,8 @@ export default function Announcements() {
                             {isNew && <span style={{ fontSize: '0.55rem', fontWeight: 900, color: '#10B981', background: '#DCFCE7', padding: '2px 6px', borderRadius: '4px' }}><FontAwesomeIcon icon={faBolt} /> NEW</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '4px' }}>
-                            <button onClick={() => handleEdit(item)} className="icon-button" title="Edit" style={{ width: '22px', height: '22px', color: '#4169E1' }}><FontAwesomeIcon icon={faEdit} style={{ fontSize: '0.65rem' }} /></button>
-                            <button onClick={() => handleDelete(item._id, item.type)} className="icon-button" title="Delete" style={{ width: '22px', height: '22px', color: '#FCA5A5' }}><FontAwesomeIcon icon={faTrash} style={{ fontSize: '0.65rem' }} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="icon-button" title="Edit" style={{ width: '22px', height: '22px', color: '#4169E1' }}><FontAwesomeIcon icon={faEdit} style={{ fontSize: '0.65rem' }} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDelete(item._id, item.type); }} className="icon-button" title="Delete" style={{ width: '22px', height: '22px', color: '#FCA5A5' }}><FontAwesomeIcon icon={faTrash} style={{ fontSize: '0.65rem' }} /></button>
                         </div>
                     </div>
 
@@ -287,6 +312,11 @@ export default function Announcements() {
                         <div style={{ background: '#F8FAFC', padding: '0.75rem', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}><FontAwesomeIcon icon={faMapMarkerAlt} style={{ marginRight: '6px', color: '#8B5CF6', width: '12px' }} /> {item.location}</div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}><FontAwesomeIcon icon={faClock} style={{ marginRight: '6px', color: '#8B5CF6', width: '12px' }} /> {item.date} {item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : item.startTime ? item.startTime : 'Time TBA'}</div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <FontAwesomeIcon icon={faUsers} style={{ color: '#8B5CF6', width: '12px' }} />
+                                <span style={{ color: '#8B5CF6' }}>{item.capacityTaken || 0} / {item.capacityTotal || 0}</span>
+                                <span style={{ fontSize: '0.65rem', color: '#94A3B8', fontWeight: 600 }}>Participants Registered</span>
+                            </div>
                         </div>
                     )}
 
@@ -302,6 +332,91 @@ export default function Announcements() {
                 </div>
             );
             })}
+        </div>
+      )}
+
+      {/* EVENT DETAIL MODAL */}
+      {isDetailModalOpen && selectedEvent && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+          <div className="report-card animate-fade-in" style={{ width: '100%', maxWidth: '600px', padding: '2rem', borderRadius: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                <div>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>{selectedEvent.title}</h2>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#8B5CF6', background: '#F5F3FF', padding: '4px 10px', borderRadius: '6px' }}>EVENT INTEL</span>
+                </div>
+                <button onClick={() => { setIsDetailModalOpen(false); setSelectedEvent(null); }} className="icon-button"><FontAwesomeIcon icon={faTimes} size="lg" /></button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ background: '#F8FAFC', padding: '1rem', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '8px' }}>Logistics & Schedule</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}><FontAwesomeIcon icon={faMapMarkerAlt} style={{ marginRight: '8px', color: '#8B5CF6' }} /> {selectedEvent.location}</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}><FontAwesomeIcon icon={faClock} style={{ marginRight: '8px', color: '#8B5CF6' }} /> {selectedEvent.date}</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginLeft: '22px' }}>{selectedEvent.startTime} - {selectedEvent.endTime || 'TBA'}</div>
+                    </div>
+                </div>
+                <div style={{ background: '#F8FAFC', padding: '1rem', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '8px' }}>Registration Status</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '100%', paddingBottom: '10px' }}>
+                        <div style={{ fontSize: '2rem', fontWeight: 900, color: '#0F172A' }}>{selectedEvent.capacityTaken || 0}</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#94A3B8' }}>/ {selectedEvent.capacityTotal || 0}</div>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: '#E2E8F0', borderRadius: '3px', marginTop: '4px' }}>
+                        <div style={{ 
+                            width: `${Math.min(100, ((selectedEvent.capacityTaken || 0) / (selectedEvent.capacityTotal || 1)) * 100)}%`, 
+                            height: '100%', 
+                            background: '#8B5CF6', 
+                            borderRadius: '3px' 
+                        }}></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '8px' }}>Intel Description</div>
+                <p style={{ fontSize: '0.95rem', color: '#475569', lineHeight: 1.6 }}>{selectedEvent.description || selectedEvent.content}</p>
+                {selectedEvent.note && (
+                    <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#FFFBEB', border: '1px solid #FEF3C7', borderRadius: '10px', fontSize: '0.85rem', color: '#92400E' }}>
+                        <strong>Note:</strong> {selectedEvent.note}
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Registered Residents</span>
+                    <span>{selectedEvent.registrations?.length || 0} Records</span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedEvent.registrations && selectedEvent.registrations.length > 0 ? (
+                        selectedEvent.registrations.map((reg, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #F1F5F9' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A' }}>{reg.fullName}</div>
+                                    <div style={{ fontSize: '0.7rem', color: '#64748B' }}>{reg.mobileNumber} • {reg.age} yrs old</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94A3B8' }}>{new Date(reg.registeredAt).toLocaleDateString()}</div>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10B981' }}>VERIFIED</div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div style={{ textAlign: 'center', padding: '2rem', background: '#F8FAFC', borderRadius: '16px', border: '2px dashed #E2E8F0' }}>
+                            <FontAwesomeIcon icon={faUsers} style={{ fontSize: '1.5rem', color: '#CBD5E1', marginBottom: '0.5rem' }} />
+                            <p style={{ fontSize: '0.85rem', color: '#94A3B8', fontWeight: 600 }}>No residents registered yet.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div style={{ marginTop: '2rem', display: 'flex', gap: '12px' }}>
+                <button className="button" style={{ flex: 1, background: '#F1F5F9', color: '#64748B' }} onClick={() => setIsDetailModalOpen(false)}>CLOSE INTEL</button>
+                <button className="button button--primary" style={{ flex: 1, background: '#8B5CF6' }} onClick={() => { setIsDetailModalOpen(false); handleEdit(selectedEvent); }}>MODIFY EVENT</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -328,6 +443,7 @@ export default function Announcements() {
                       <option value="Pregnant Women">Pregnant Patients</option>
                       <option value="Senior Citizens">Senior Citizens</option>
                       <option value="Health Alert">Health Alert</option>
+                      <option value="News / Public Notice">News / Public Notice</option>
                       <option value="Event">Event</option>
                   </select>
                   <select value={formData.priority} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', outline: 'none', background: 'white', fontWeight: 700, color: '#475569', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, priority: e.target.value})}>
@@ -342,6 +458,8 @@ export default function Announcements() {
                       <input type="time" value={formData.startTime} placeholder="Start Time" style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, startTime: e.target.value})} />
                       <input type="time" value={formData.endTime} placeholder="End Time" style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, endTime: e.target.value})} />
                       <input placeholder="Logistics Venue" value={formData.location} required style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, location: e.target.value})} />
+                      <input type="number" placeholder="Total Capacity" value={formData.capacityTotal} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, capacityTotal: parseInt(e.target.value) || 0})} />
+                      <input type="number" placeholder="Taken" value={formData.capacityTaken} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '0.75rem' }} onChange={e => setFormData({...formData, capacityTaken: parseInt(e.target.value) || 0})} />
                   </div>
               )}
               <textarea placeholder="Instruction details..." value={formData.content} required style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #E2E8F0', minHeight: '120px', outline: 'none', fontSize: '0.875rem', lineHeight: 1.6 }} onChange={e => setFormData({...formData, content: e.target.value})} />

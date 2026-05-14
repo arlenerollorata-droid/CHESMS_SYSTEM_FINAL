@@ -48,3 +48,27 @@ exports.deleteEvent = async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 };
+
+exports.registerForEvent = async (req, res) => {
+    try {
+        const { eventId } = req.params;
+        const registrationData = req.body;
+
+        const event = await Event.findById(eventId);
+        if (!event) {
+            return res.status(404).json({ message: "Event not found" });
+        }
+
+        if (event.capacityTotal > 0 && event.capacityTaken >= event.capacityTotal) {
+            return res.status(400).json({ message: "Event is already at full capacity" });
+        }
+
+        event.registrations.push(registrationData);
+        event.capacityTaken += 1;
+        await event.save();
+
+        res.status(200).json({ message: "Registered successfully", event });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};

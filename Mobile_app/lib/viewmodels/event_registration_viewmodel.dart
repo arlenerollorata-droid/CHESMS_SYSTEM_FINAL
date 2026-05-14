@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
 class EventRegistrationViewModel extends ChangeNotifier {
+  final ApiService _apiService = ApiService();
   String _fullName = '';
   String _age = '';
   String _mobileNumber = '';
@@ -48,12 +50,21 @@ class EventRegistrationViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      final registrationData = {
+        'fullName': _fullName,
+        'age': int.tryParse(_age) ?? 0,
+        'mobileNumber': _mobileNumber,
+        'medicalCondition': _medicalCondition,
+        'allergies': _allergies,
+        'contactPerson': _contactPerson,
+        'contactNumber': _contactNumber,
+      };
+
+      final success = await _apiService.registerForEvent(eventId, registrationData);
       
       _isLoading = false;
       notifyListeners();
-      return true;
+      return success;
     } catch (e) {
       _isLoading = false;
       notifyListeners();

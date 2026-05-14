@@ -11,8 +11,8 @@ class ApiConfig {
     defaultValue: '',
   );
 
-  // Real device IP: 192.168.1.3
-  static const String _realDeviceIp = '192.168.1.3';
+  // Real device IP (via USB adb reverse): 127.0.0.1
+  static const String _realDeviceIp = '127.0.0.1';
 
   static String get baseUrl {
     if (_apiBaseUrlFromEnv.trim().isNotEmpty) {

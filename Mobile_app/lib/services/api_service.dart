@@ -140,6 +140,17 @@ class ApiService {
     return jsonList.map((json) => EventItem.fromJson(json as Map<String, dynamic>)).toList();
   }
 
+  Future<bool> registerForEvent(String eventId, Map<String, dynamic> registrationData) async {
+    final uri = Uri.parse('$baseUrl/events/$eventId/register');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(registrationData),
+    );
+
+    return response.statusCode == 200;
+  }
+
   Future<User> register(String email, String password, String name) async {
     final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     final firstName = parts.isNotEmpty ? parts.first : name.trim();
