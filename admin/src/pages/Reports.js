@@ -266,10 +266,10 @@ function Reports() {
     setLoading(true);
     try {
       const [recRes, patRes, schRes, resRes] = await Promise.allSettled([
-        axios.get("http://localhost:5000/api/records"),
-        axios.get("http://localhost:5000/api/patients"),
-        axios.get("http://localhost:5000/api/schedules"),
-        axios.get("http://localhost:5000/api/residents")
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/records"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/patients"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/schedules"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/residents")
       ]);
       
       const records = recRes.status === 'fulfilled' ? recRes.value.data : [];

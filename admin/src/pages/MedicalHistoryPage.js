@@ -22,7 +22,7 @@ import {
 import PatientRecordProfile from "../features/medical-history/PatientRecordProfile"
 import axios from "axios"
 
-const API_BASE = window.location.hostname === 'localhost' ? "http://localhost:5000/api" : `http://${window.location.hostname}:5000/api`
+const API_BASE = "https://chesmssystemfinal-production.up.railway.app/api"
 const RESIDENTS_API = `${API_BASE}/residents`
 const RECORDS_API = `${API_BASE}/records`
 

@@ -12,7 +12,7 @@ import {
   faChevronRight, faEraser, faSms, faBiohazard, faAppleAlt, faInfoCircle, faCapsules, faHeartbeat
 } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = "http://localhost:5000/api/schedules";
+const API_URL = "https://chesmssystemfinal-production.up.railway.app/api/schedules";
 
 // Master data for Programs and Services
 const PROGRAM_CATALOG = {
@@ -79,8 +79,8 @@ export default function Appointments() {
     try {
       const [schedRes, patRes, resRes] = await Promise.all([
         axios.get(API_URL),
-        axios.get("http://localhost:5000/api/patients"),
-        axios.get("http://localhost:5000/api/residents")
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/patients"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/residents")
       ]);
       setSchedules(schedRes.data);
       setPatients(patRes.data);

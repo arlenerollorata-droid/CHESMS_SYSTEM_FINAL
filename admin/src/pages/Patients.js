@@ -36,9 +36,9 @@ import {
   faCalendarAlt
 } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = "http://localhost:5000/api/patients";
-const RECORDS_API = "http://localhost:5000/api/records";
-const RESIDENTS_API = "http://localhost:5000/api/residents";
+const API_URL = "https://chesmssystemfinal-production.up.railway.app/api/patients";
+const RECORDS_API = "https://chesmssystemfinal-production.up.railway.app/api/records";
+const RESIDENTS_API = "https://chesmssystemfinal-production.up.railway.app/api/residents";
 
 export default function Patients() {
   const navigate = useNavigate();

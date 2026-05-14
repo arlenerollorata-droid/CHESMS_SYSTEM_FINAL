@@ -9,7 +9,7 @@ import {
   faGraduationCap, faBriefcase, faIdCard
 } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = "http://localhost:5000/api/residents";
+const API_URL = "https://chesmssystemfinal-production.up.railway.app/api/residents";
 
 const incomeOptions = [
   "No Income", "Below 5,000", "5,000 - 10,000", "10,000 - 15,000", 

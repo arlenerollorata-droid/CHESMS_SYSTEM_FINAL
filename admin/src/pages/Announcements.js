@@ -10,8 +10,8 @@ import {
   faHourglassHalf, faBolt, faSatelliteDish
 } from "@fortawesome/free-solid-svg-icons";
 
-const ANN_API = "http://localhost:5000/api/announcements";
-const EVT_API = "http://localhost:5000/api/events";
+const ANN_API = "https://chesmssystemfinal-production.up.railway.app/api/announcements";
+const EVT_API = "https://chesmssystemfinal-production.up.railway.app/api/events";
 
 export default function Announcements() {
   const [items, setItems] = useState([]);

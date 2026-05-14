@@ -33,7 +33,7 @@ export default function Attendance() {
 
   const fetchAttendance = useCallback(async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/attendance");
+      const res = await axios.get("https://chesmssystemfinal-production.up.railway.app/api/attendance");
       const seen = new Set()
       const deduped = res.data.filter(a => {
         if (seen.has(a._id)) return false
@@ -47,8 +47,8 @@ export default function Attendance() {
   const fetchInitialData = useCallback(async () => {
     try {
       const [pRes, eRes] = await Promise.all([
-        axios.get("http://localhost:5000/api/patients"),
-        axios.get("http://localhost:5000/api/events")
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/patients"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/events")
       ]);
       setPatients(pRes.data);
       setEvents(eRes.data);
@@ -64,7 +64,7 @@ export default function Attendance() {
     try {
       if (scannerInstance) scannerInstance.pause();
       
-      const res = await axios.get(`http://localhost:5000/api/patients`);
+      const res = await axios.get(`https://chesmssystemfinal-production.up.railway.app/api/patients`);
       const patient = res.data.find(p => p._id === decodedText || p._id.slice(-6).toUpperCase() === decodedText.toUpperCase());
       
       if (patient) {
@@ -109,7 +109,7 @@ export default function Attendance() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post("http://localhost:5000/api/attendance/mark", formData);
+      await axios.post("https://chesmssystemfinal-production.up.railway.app/api/attendance/mark", formData);
       toast.success("Attendance marked successfully!");
       fetchAttendance();
       setIsModalOpen(false);
@@ -124,7 +124,7 @@ export default function Attendance() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`http://localhost:5000/api/attendance/${editingRecord._id}`, {
+      await axios.put(`https://chesmssystemfinal-production.up.railway.app/api/attendance/${editingRecord._id}`, {
         status: formData.status,
         remarks: formData.remarks
       });
@@ -141,7 +141,7 @@ export default function Attendance() {
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this attendance record?")) {
       try {
-        await axios.delete(`http://localhost:5000/api/attendance/${id}`);
+        await axios.delete(`https://chesmssystemfinal-production.up.railway.app/api/attendance/${id}`);
         toast.success("Attendance record deleted.");
         fetchAttendance();
       } catch (err) {

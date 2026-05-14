@@ -46,7 +46,7 @@ function Profile() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const apiBase = "http://localhost:5000/api";
+  const apiBase = "https://chesmssystemfinal-production.up.railway.app/api";
 
   useEffect(() => {
     fetchProfile();

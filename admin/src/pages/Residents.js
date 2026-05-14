@@ -12,7 +12,7 @@ import {
   faThLarge, faList
 } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = "http://localhost:5000/api/residents";
+const API_URL = "https://chesmssystemfinal-production.up.railway.app/api/residents";
 
 const getGenderColor = (gender, type = 'primary') => {
   const colors = {

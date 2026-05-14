@@ -6,8 +6,8 @@ import { Toaster, toast } from "react-hot-toast"
 import Layout from "../components/Layout"
 import { CASE_CATEGORIES, PROTOCOLS, TIME_SLOTS, URGENCY_LEVELS, APPOINTMENT_STATUS, LOCATIONS, SCHEDULE_TYPES, SERVICE_DURATION } from "../data/appointmentSchema"
 
-const API_URL = "http://localhost:5000/api/schedules"
-const APPOINTMENTS_API_URL = "http://localhost:5000/api/appointments"
+const API_URL = "https://chesmssystemfinal-production.up.railway.app/api/schedules"
+const APPOINTMENTS_API_URL = "https://chesmssystemfinal-production.up.railway.app/api/appointments"
 
 const CATEGORY_ICONS = {
   'Prenatal': faBaby,
@@ -100,8 +100,8 @@ export default function Schedule() {
       const [s, a, p, r] = await Promise.all([
         axios.get(API_URL), // schedules
         axios.get(APPOINTMENTS_API_URL), // appointments
-        axios.get("http://localhost:5000/api/patients"),
-        axios.get("http://localhost:5000/api/residents"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/patients"),
+        axios.get("https://chesmssystemfinal-production.up.railway.app/api/residents"),
       ])
       
       // Merge schedules and appointments into one list

@@ -42,7 +42,7 @@ function TopNavbar({ onMenuClick }) {
 
   const fetchNotifications = async () => {
     try {
-      const apiBase = "http://localhost:5000/api";
+      const apiBase = "https://chesmssystemfinal-production.up.railway.app/api";
       const [annRes, evtRes, resRes, recRes] = await Promise.all([
         axios.get(`${apiBase}/announcements`),
         axios.get(`${apiBase}/events`),
